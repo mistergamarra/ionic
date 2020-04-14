@@ -17,6 +17,10 @@ export const createPointerEvents = (
   let rmMouseStart: (() => void) | undefined;
   let rmMouseMove: (() => void) | undefined;
   let rmMouseUp: (() => void) | undefined;
+  let rmPointerDown: (() => void) | undefined;
+  let rmPointerMove: (() => void) | undefined;
+  let rmPointerUp: (() => void) | undefined;
+  let rmPointerCancel: (() => void) | undefined;
   let lastTouchEvent = 0;
 
   const handleTouchStart = (ev: any) => {
@@ -50,6 +54,22 @@ export const createPointerEvents = (
     }
   };
 
+  const handlePointerDown = (ev: any) => {
+    lastTouchEvent = Date.now() + MOUSE_WAIT;
+    if (!pointerDown(ev)) {
+      return;
+    }
+    if (!rmPointerMove && pointerMove) {
+      rmPointerMove = addEventListener(el, 'pointermove', pointerMove, options);
+    }
+    if (!rmPointerUp) {
+      rmPointerUp = addEventListener(el, 'pointerup', handlePointerUp, options);
+    }
+    if (!rmPointerCancel) {
+      rmPointerCancel = addEventListener(el, 'pointercancel', handlePointerUp, options);
+    }
+  };
+
   const handleTouchEnd = (ev: any) => {
     stopTouch();
     if (pointerUp) {
@@ -59,6 +79,13 @@ export const createPointerEvents = (
 
   const handleMouseUp = (ev: any) => {
     stopMouse();
+    if (pointerUp) {
+      pointerUp(ev);
+    }
+  };
+
+  const handlePointerUp = (ev: any) => {
+    stopPointer();
     if (pointerUp) {
       pointerUp(ev);
     }
@@ -87,9 +114,23 @@ export const createPointerEvents = (
     rmMouseMove = rmMouseUp = undefined;
   };
 
+  const stopPointer = () => {
+    if (rmPointerMove) {
+      rmPointerMove();
+    }
+    if (rmPointerUp) {
+      rmPointerUp();
+    }
+    if (rmPointerCancel) {
+      rmPointerCancel();
+    }
+    rmPointerMove = rmPointerUp = rmPointerCancel = undefined;
+  };
+
   const stop = () => {
     stopTouch();
     stopMouse();
+    stopPointer();
   };
 
   const enable = (isEnabled = true) => {
@@ -100,15 +141,24 @@ export const createPointerEvents = (
       if (rmMouseStart) {
         rmMouseStart();
       }
-      rmTouchStart = rmMouseStart = undefined;
+      if (rmPointerDown) {
+        rmPointerDown();
+      }
+      rmTouchStart = rmMouseStart = rmPointerDown = undefined;
       stop();
 
     } else {
-      if (!rmTouchStart) {
-        rmTouchStart = addEventListener(el, 'touchstart', handleTouchStart, options);
-      }
-      if (!rmMouseStart) {
-        rmMouseStart = addEventListener(el, 'mousedown', handleMouseDown, options);
+      if (supportsPointerEvents()) {
+        if (!rmPointerDown) {
+          rmPointerDown = addEventListener(el, 'pointerdown', handlePointerDown, options);
+        }
+      } else {
+        if (!rmTouchStart) {
+          rmTouchStart = addEventListener(el, 'touchstart', handleTouchStart, options);
+        }
+        if (!rmMouseStart) {
+          rmMouseStart = addEventListener(el, 'mousedown', handleMouseDown, options);
+        }
       }
     }
   };
@@ -123,6 +173,13 @@ export const createPointerEvents = (
     stop,
     destroy
   };
+};
+
+const supportsPointerEvents = () => {
+  return (
+    typeof (document as any) !== 'undefined' &&
+    'onpointerdown' in document
+  );
 };
 
 const getDocument = (node: Node) => {
